@@ -3,7 +3,7 @@ from llm.text_to_speech import text_to_speech
 
 
 
-def create_episode_lineup(message):
+def create_episode_lineup(message, language):
     """Send a message to OpenAI and return the response."""
     try:
         completion = openai.chat.completions.create(
@@ -14,24 +14,26 @@ def create_episode_lineup(message):
                  For now you have to create an episode lineup for the podcast.
                  The episode lineup should be in 5 episodes.
                  The episode lineup should be in the following format:
+                 
                  Title of the podcast: Title of the podcast
                  Episode 1: Topic of the episode in short
                  Episode 2: Topic of the episode in short
                  ...
                  Episode 5: Topic of the episode in short
                  return only the episode lineup, no other text.
+                 It should be in the language {language}.
                  """},
-                {"role": "user", "content": f"this is prompt of the user for the episode lineup: {message}"},
+                {"role": "user", "content": f"this is prompt of the user for the podcast, you have to talke about the following topic: {message}"},
             ]
         )
-        text_to_speech(completion.choices[0].message.content, "first_episode")
+        print(completion.choices[0].message.content)
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         raise
 
 
-def create_first_episode(message, episode_lineup):
+def create_first_episode(message, episode_lineup, language):
     """Send a message to OpenAI and return the response."""
     try:
         completion = openai.chat.completions.create(
@@ -44,17 +46,19 @@ def create_first_episode(message, episode_lineup):
                  The script should explain the main topic of the podcast.
                  Explain how the episode lineup is going to be.
                  Remember the script, is then going to be read by a Text to Speech model by OpenAI with voice alloy.
+                 It should be in the language {language}.
                  """},
                 {"role": "user", "content": f"this is the episode lineup: {episode_lineup} and the topic of the podcast: {message}"},
             ]
         )
+        
         text_to_speech(completion.choices[0].message.content, "first_episode")
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         raise
 
-def create_episode(message, episode_number, previous_episode_script):
+def create_episode(message, episode_number, previous_episode_script, language):
     """Send a message to OpenAI and return the response."""
     try:
         completion = openai.chat.completions.create(
@@ -68,6 +72,7 @@ def create_episode(message, episode_number, previous_episode_script):
                  
                  Remember the script, is then going to be read by a Text to Speech model by OpenAI with voice alloy.
                  the output should be MAX 4000 characters.
+                 It should be in the language {language}.
                  """},
                 {"role": "user", "content": f"this is prompt of the user for the first episode: {message}"},
             ]
@@ -77,3 +82,15 @@ def create_episode(message, episode_number, previous_episode_script):
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         raise
+
+
+def start_chain(message, language):
+    print("Starting chain")
+    """Start the chain of the podcast."""
+    episode_lineup = create_episode_lineup(message, language)
+    print("Episode lineup created")
+    first_episode = create_first_episode(message, episode_lineup, language)
+    print("First episode created")
+    episode_1 = create_episode(message, 1, first_episode, language)
+    print("Episode 1 created")
+    return episode_1
