@@ -1,10 +1,11 @@
 import sqlite3
 import os
 from datetime import datetime
+from config import Config
 
 class Database:
-    def __init__(self, db_file="podcast_bot.db"):
-        self.db_file = db_file
+    def __init__(self, db_file=None):
+        self.db_file = db_file or os.path.join(os.path.dirname(__file__), '..', 'podcast_bot.db')
         self.init_db()
 
     def init_db(self):

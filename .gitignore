@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -22,22 +23,27 @@ wheels/
 
 # Virtual Environment
 venv/
-env/
 ENV/
+
+# Environment Variables
 .env
+
+# Database
+*.db
+*.sqlite3
+
+# Audio files
+llm/episodes/
+
+# Logs
+*.log
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# OS
 .DS_Store
-
-# Project specific
-*.mp3
-*.log
-.coverage
-htmlcov/
-.pytest_cache/
-
-.db
+Thumbs.db

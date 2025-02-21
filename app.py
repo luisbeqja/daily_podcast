@@ -1,10 +1,14 @@
 from flask import Flask, jsonify, request
 import threading
 from telegram_api.bot import run_bot_forever
+from config import Config
+import os
 
 from llm.llm import create_episode, create_episode_lineup, create_first_episode
 
 app = Flask(__name__)
+app.config.from_object(Config)
+Config.init_app(app)
 
 # Global variable to track the bot thread
 bot_thread = None
@@ -72,5 +76,9 @@ def episode():
     response = create_episode(podcast_topic, 1, first_episode_script)
     return jsonify({"message": response})
 
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy"}), 200
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
