@@ -1,5 +1,6 @@
 from llm.config import logger, openai
 from llm.text_to_speech import text_to_speech
+import os
 
 language_prompts = {
         'en': "Create the response in English",
@@ -8,9 +9,16 @@ language_prompts = {
 }
         
 
-def create_episode_lineup(message, language):
+def ensure_user_directory(user_id):
+    """Create a directory for the user if it doesn't exist."""
+    user_dir = os.path.join("llm", "episodes", str(user_id))
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return user_dir
+
+def create_episode_lineup(message, language, user_id):
     """Send a message to OpenAI and return the response."""
-    print("Creating episode lineup" + language)
+    print(f"Creating episode lineup for user {user_id} in {language}")
     try:
         lang_instruction = language_prompts.get(language, language_prompts['en'])
         
@@ -41,7 +49,7 @@ def create_episode_lineup(message, language):
         raise
 
 
-def create_first_episode(message, episode_lineup, language):
+def create_first_episode(message, episode_lineup, language, user_id):
     """Send a message to OpenAI and return the response."""
     try:
         lang_instruction = language_prompts.get(language, language_prompts['en'])
@@ -64,13 +72,15 @@ def create_first_episode(message, episode_lineup, language):
             ]
         )
         
-        text_to_speech(completion.choices[0].message.content, "first_episode")
+        # Create user directory and save file there
+        user_dir = ensure_user_directory(user_id)
+        text_to_speech(completion.choices[0].message.content, os.path.join(user_dir, "first_episode"))
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         raise
 
-def create_episode(message, episode_number, previous_episode_script, language):
+def create_episode(message, episode_number, previous_episode_script, language, user_id):
     """Send a message to OpenAI and return the response."""
     try:
         lang_instruction = language_prompts.get(language, language_prompts['en'])
@@ -93,7 +103,9 @@ def create_episode(message, episode_number, previous_episode_script, language):
                 {"role": "user", "content": f"Create episode {episode_number} about: {message}"},
             ]
         )
-        text_to_speech(completion.choices[0].message.content, f"episode_{episode_number}")
+        # Create user directory and save file there
+        user_dir = ensure_user_directory(user_id)
+        text_to_speech(completion.choices[0].message.content, os.path.join(user_dir, f"episode_{episode_number}"))
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
@@ -101,13 +113,13 @@ def create_episode(message, episode_number, previous_episode_script, language):
 
 
 
-def start_chain(message, language):
-    print("Starting chain")
+def start_chain(message, language, user_id):
+    print(f"Starting chain for user {user_id}")
     """Start the chain of the podcast."""
-    episode_lineup = create_episode_lineup(message, language)
+    episode_lineup = create_episode_lineup(message, language, user_id)
     print("Episode lineup created")
-    first_episode = create_first_episode(message, episode_lineup, language)
+    first_episode = create_first_episode(message, episode_lineup, language, user_id)
     print("First episode created")
-    episode_1 = create_episode(message, 1, first_episode, language)
+    episode_1 = create_episode(message, 1, first_episode, language, user_id)
     print("Episode 1 created")
     return episode_1

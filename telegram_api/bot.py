@@ -138,12 +138,13 @@ async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podca
         # Add user to database if not exists
         db.add_user(user_id, username)
         
-        # Generate podcast
-        start_chain(podcast_topic, language)
+        # Generate podcast with user_id
+        start_chain(podcast_topic, language, user_id)
 
-        # Path to the audio files
-        intro_path = os.path.join("llm", "episodes", f"first_episode.mp3")
-        episode_path = os.path.join("llm", "episodes", f"episode_1.mp3")
+        # Path to the audio files in user's directory
+        user_dir = os.path.join("llm", "episodes", str(user_id))
+        intro_path = os.path.join(user_dir, "first_episode.mp3")
+        episode_path = os.path.join(user_dir, "episode_1.mp3")
         
         if os.path.exists(intro_path) and os.path.exists(episode_path):
             # Send the audio files
@@ -160,7 +161,7 @@ async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podca
                 filename=f"First_Episode_{podcast_topic.replace(' ', '_')}.mp3"
             )
             
-            # Save podcast information to database
+            # Save podcast information to database with user-specific paths
             db.add_podcast(
                 user_id=user_id,
                 topic=podcast_topic,
