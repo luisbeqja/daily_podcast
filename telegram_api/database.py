@@ -1,7 +1,5 @@
 import sqlite3
 import os
-from datetime import datetime
-from config import Config
 
 class Database:
     def __init__(self, db_file=None):
