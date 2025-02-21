@@ -1,15 +1,23 @@
 from llm.config import logger, openai
 from llm.text_to_speech import text_to_speech
 
-
+language_prompts = {
+        'en': "Create the response in English",
+        'es': "Crea la respuesta en español. Asegúrate que todo el texto esté en español.",
+        'it': "Crea la risposta in italiano. Assicurati che tutto il testo sia in italiano."
+}
+        
 
 def create_episode_lineup(message, language):
     """Send a message to OpenAI and return the response."""
+    print("Creating episode lineup" + language)
     try:
+        lang_instruction = language_prompts.get(language, language_prompts['en'])
+        
         completion = openai.chat.completions.create(
         model="gpt-4o-mini",  # Updated model name
         messages=[
-                {"role": "system", "content": """
+                {"role": "system", "content": f"""
                  You are an podcaster assistant your name is "Lisa". 
                  For now you have to create an episode lineup for the podcast.
                  The episode lineup should be in 5 episodes.
@@ -20,13 +28,13 @@ def create_episode_lineup(message, language):
                  Episode 2: Topic of the episode in short
                  ...
                  Episode 5: Topic of the episode in short
+                 
+                 {lang_instruction}
                  return only the episode lineup, no other text.
-                 It should be in the language {language}.
                  """},
-                {"role": "user", "content": f"this is prompt of the user for the podcast, you have to talke about the following topic: {message}"},
+                {"role": "user", "content": f"Create a podcast lineup about: {message}"},
             ]
         )
-        print(completion.choices[0].message.content)
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
@@ -36,19 +44,23 @@ def create_episode_lineup(message, language):
 def create_first_episode(message, episode_lineup, language):
     """Send a message to OpenAI and return the response."""
     try:
+        lang_instruction = language_prompts.get(language, language_prompts['en'])
+        
         completion = openai.chat.completions.create(
-        model="gpt-4o-mini",  # Updated model name
+        model="gpt-4o-mini",
         messages=[
-                {"role": "system", "content": """
+                {"role": "system", "content": f"""
                  You are an podcaster assistant your name is "Lisa". 
-                 For now you have only to write a script for the intro intro of the podcast. 
-                 The script should be in 30 seconds long.
+                 For now you have only to write a script for the intro of the podcast. 
+                 The script should be 30 seconds long.
                  The script should explain the main topic of the podcast.
                  Explain how the episode lineup is going to be.
-                 Remember the script, is then going to be read by a Text to Speech model by OpenAI with voice alloy.
-                 It should be in the language {language}.
+                 Remember the script will be read by a Text to Speech model.
+                 
+                 {lang_instruction}
+                 Make sure ALL text is in the specified language.
                  """},
-                {"role": "user", "content": f"this is the episode lineup: {episode_lineup} and the topic of the podcast: {message}"},
+                {"role": "user", "content": f"Create an intro for a podcast about: {message}\nThis is the episode lineup: {episode_lineup}"},
             ]
         )
         
@@ -61,20 +73,24 @@ def create_first_episode(message, episode_lineup, language):
 def create_episode(message, episode_number, previous_episode_script, language):
     """Send a message to OpenAI and return the response."""
     try:
+        lang_instruction = language_prompts.get(language, language_prompts['en'])
+        
         completion = openai.chat.completions.create(
         model="gpt-4o-mini", 
         messages=[
                 {"role": "system", "content": f"""
                  You are an podcaster assistant your name is "Lisa". 
-                 You to write the script for the episode {episode_number} of the podcast. 
-                 The script should be in 3 minutes long.
-                 this is the script of the previous episode: {previous_episode_script}
+                 Write the script for episode {episode_number} of the podcast. 
+                 The script should be 3 minutes long.
+                 Previous episode script: {previous_episode_script}
                  
-                 Remember the script, is then going to be read by a Text to Speech model by OpenAI with voice alloy.
-                 the output should be MAX 4000 characters.
-                 It should be in the language {language}.
+                 Remember this will be read by a Text to Speech model.
+                 The output should be MAX 4000 characters.
+                 
+                 {lang_instruction}
+                 Make sure ALL text is in the specified language.
                  """},
-                {"role": "user", "content": f"this is prompt of the user for the first episode: {message}"},
+                {"role": "user", "content": f"Create episode {episode_number} about: {message}"},
             ]
         )
         text_to_speech(completion.choices[0].message.content, f"episode_{episode_number}")
@@ -82,6 +98,7 @@ def create_episode(message, episode_number, previous_episode_script, language):
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         raise
+
 
 
 def start_chain(message, language):

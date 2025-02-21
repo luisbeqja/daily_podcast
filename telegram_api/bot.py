@@ -14,6 +14,8 @@ from telegram.ext import (
 )
 from typing import Set
 import sys
+from database import Database
+import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -36,15 +38,32 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TOKEN:
     raise ValueError("No TELEGRAM_BOT_TOKEN found in environment variables")
 
-print(TOKEN)
+
 
 # Define conversation states
 WAITING_FOR_TOPIC = 1
 WAITING_FOR_CONFIRMATION = 2
 WAITING_FOR_LANGUAGE = 3  # New state for language selection
 
+help_message = """
+Heyyy! 😊 I'm Lisa, your personal Podcaster 🎙️.
+
+You can ask me to create a podcast for you based on a topic or a question. 🤔
+
+I will generate a podcast of 5 episodes for you. 🎧
+
+After the first 2 episodes, I'll ask you if you want to listen to the next one. 📻
+
+This project is still under development, so please be patient with me. 🙏
+
+type /start to start the conversation.
+"""
+
 # Set to store users who have received their episode
 users_with_episode: Set[int] = set()
+
+# Initialize database after other global variables
+db = Database()
 
 # Add this to store user's language preference
 def get_language_name(lang_code):
@@ -107,38 +126,48 @@ async def restrict_user(context: ContextTypes.DEFAULT_TYPE, user_id: int, msg) -
 async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podcast_topic: str, language: str, message=None):
     """Send an existing podcast audio file to the user."""
     try:
-        # Use the provided message object or try to get it from update
         msg = message or update.message
         if not msg:
             logger.error("No message object available")
             return
         
-        # Pass podcast_topic instead of msg
+        # Get user information
+        user_id = msg.chat.id
+        username = msg.chat.username
+        
+        # Add user to database if not exists
+        db.add_user(user_id, username)
+        
+        # Generate podcast
         start_chain(podcast_topic, language)
 
-        # Path to the audio file
-        audio_path = os.path.join("llm", "episodes", f"first_episode.mp3")
-        audio_path_1 = os.path.join("llm", "episodes", f"episode_1.mp3")
+        # Path to the audio files
+        intro_path = os.path.join("llm", "episodes", f"first_episode.mp3")
+        episode_path = os.path.join("llm", "episodes", f"episode_1.mp3")
         
-        # Check if file exists
-        if os.path.exists(audio_path):
-            # Send the audio file
+        if os.path.exists(intro_path) and os.path.exists(episode_path):
+            # Send the audio files
             await msg.reply_text("🎙️ Here's your podcast, enjoy!")
             await msg.reply_audio(
-                audio=open(audio_path, 'rb'),
+                audio=open(intro_path, 'rb'),
                 title=f"Introduction on {podcast_topic}",
-                filename=f"Introduction {podcast_topic.replace(' ', '_')}.mp3"
+                filename=f"Introduction_{podcast_topic.replace(' ', '_')}.mp3"
             )
             await msg.reply_audio(
-                audio=open(audio_path_1, 'rb'),
-                title=f"First Episode about {audio_path_1}",
+                audio=open(episode_path, 'rb'),
+                title=f"First Episode about {podcast_topic}",
                 caption="There you go! this is the first episode of your podcast! Tomorrow you will receive the next one! 🎧",
-                filename=f"First Episode {audio_path_1.replace(' ', '_')}.mp3"
+                filename=f"First_Episode_{podcast_topic.replace(' ', '_')}.mp3"
             )
             
-            # Get user ID and restrict them
-            user_id = msg.chat.id
-            users_with_episode.add(user_id)
+            # Save podcast information to database
+            db.add_podcast(
+                user_id=user_id,
+                topic=podcast_topic,
+                language=language,
+                intro_path=intro_path,
+                episode_path=episode_path
+            )
             
             # Restrict user from sending messages
             await restrict_user(context, user_id, msg)
@@ -183,10 +212,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return WAITING_FOR_CONFIRMATION
     elif query.data == 'my_podcasts':
-        await query.message.reply_text("Here are your previously created podcasts: (Coming soon!) 📚")
+        # Get user's podcasts from database
+        user_id = query.message.chat.id
+        podcasts = db.get_user_podcasts(user_id)
+        
+        if podcasts:
+            response = "Here are your podcasts:\n\n"
+            for topic, language, _, _, created_at in podcasts:
+                date = datetime.datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                response += f"📚 Topic: {topic}\n"
+                response += f"🗣 Language: {get_language_name(language)}\n"
+                response += f"📅 Created: {date.strftime('%Y-%m-%d %H:%M')}\n\n"
+        else:
+            response = "You haven't created any podcasts yet! 📚"
+            
+        await query.message.reply_text(response)
         return ConversationHandler.END
     elif query.data == 'help':
-        await query.message.reply_text("I can help you create podcasts on any topic! Just tell me what you'd like to hear about. 🎧")
+        await query.message.reply_text(help_message)
         return ConversationHandler.END
     elif query.data == 'confirm_yes':
         await query.message.reply_text(
