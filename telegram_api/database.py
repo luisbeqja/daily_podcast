@@ -1,6 +1,9 @@
 import sqlite3
 import os
 from config import Config
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self, db_file=None):
@@ -92,3 +95,34 @@ class Database:
         
         conn.close()
         return exists 
+
+    def clear_user_data(self, user_id: int):
+        """Clear all podcasts for a specific user."""
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        
+        try:
+            # Get paths to delete
+            c.execute('SELECT intro_path, episode_path FROM podcasts WHERE user_id = ?', (user_id,))
+            paths = c.fetchall()
+            
+            # Delete from database
+            c.execute('DELETE FROM podcasts WHERE user_id = ?', (user_id,))
+            conn.commit()
+            
+            # Delete files
+            for intro_path, episode_path in paths:
+                try:
+                    if intro_path and os.path.exists(intro_path):
+                        os.remove(intro_path)
+                    if episode_path and os.path.exists(episode_path):
+                        os.remove(episode_path)
+                except Exception as e:
+                    logger.error(f"Error deleting files: {e}")
+                
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing user data: {e}")
+            return False
+        finally:
+            conn.close() 

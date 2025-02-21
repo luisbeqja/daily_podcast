@@ -300,6 +300,36 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Operation cancelled. Feel free to start a new podcast anytime!")
     return ConversationHandler.END
 
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clear user data and allow them to start fresh."""
+    user_id = update.message.chat_id
+    
+    # Remove from restricted users set
+    if user_id in users_with_episode:
+        users_with_episode.remove(user_id)
+    
+    # Clear database entries and files
+    if db.clear_user_data(user_id):
+        keyboard = [
+            [
+                InlineKeyboardButton("Create New Podcast 🎙️", callback_data='create_podcast'),
+                InlineKeyboardButton("My Podcasts 📚", callback_data='my_podcasts')
+            ],
+            [InlineKeyboardButton("Help ❓", callback_data='help')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "✨ All cleared! You can now create a new podcast!\n"
+            "What would you like to do?",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            "Sorry, there was an error clearing your data. "
+            "Please try again later or contact support."
+        )
+
 def start_bot() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
@@ -309,6 +339,7 @@ def start_bot() -> None:
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
+            CommandHandler("restart", restart_command),
             CallbackQueryHandler(button_callback)
         ],
         states={
@@ -316,12 +347,16 @@ def start_bot() -> None:
             WAITING_FOR_LANGUAGE: [CallbackQueryHandler(button_callback)],
             WAITING_FOR_CONFIRMATION: [CallbackQueryHandler(button_callback)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CommandHandler("restart", restart_command)
+        ],
     )
 
     # Add handlers
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("restart", restart_command))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
