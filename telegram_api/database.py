@@ -126,3 +126,72 @@ class Database:
             return False
         finally:
             conn.close() 
+
+    def get_all_users(self):
+        """Get all users and their podcast count."""
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        
+        try:
+            c.execute('''
+                SELECT 
+                    u.user_id,
+                    u.username,
+                    u.created_at,
+                    COUNT(p.id) as podcast_count
+                FROM users u
+                LEFT JOIN podcasts p ON u.user_id = p.user_id
+                GROUP BY u.user_id
+                ORDER BY u.created_at DESC
+            ''')
+            
+            users = []
+            for user_id, username, created_at, podcast_count in c.fetchall():
+                users.append({
+                    "user_id": user_id,
+                    "username": username,
+                    "created_at": created_at,
+                    "podcast_count": podcast_count
+                })
+            
+            return users
+        finally:
+            conn.close()
+
+    def get_stats(self):
+        """Get general statistics about the bot usage."""
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        
+        try:
+            stats = {}
+            
+            # Get total users
+            c.execute('SELECT COUNT(*) FROM users')
+            stats['total_users'] = c.fetchone()[0]
+            
+            # Get total podcasts
+            c.execute('SELECT COUNT(*) FROM podcasts')
+            stats['total_podcasts'] = c.fetchone()[0]
+            
+            # Get podcasts by language
+            c.execute('''
+                SELECT language, COUNT(*) as count
+                FROM podcasts
+                GROUP BY language
+            ''')
+            stats['podcasts_by_language'] = {
+                lang: count for lang, count in c.fetchall()
+            }
+            
+            # Get podcasts created today
+            c.execute('''
+                SELECT COUNT(*) 
+                FROM podcasts 
+                WHERE date(created_at) = date('now')
+            ''')
+            stats['podcasts_today'] = c.fetchone()[0]
+            
+            return stats
+        finally:
+            conn.close() 
