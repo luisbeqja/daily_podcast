@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 from typing import Set
 import sys
-from database import Database
+from telegram_api.database import Database
 import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -300,7 +300,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Operation cancelled. Feel free to start a new podcast anytime!")
     return ConversationHandler.END
 
-def main() -> None:
+def start_bot() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
@@ -325,7 +325,3 @@ def main() -> None:
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,9 +1,13 @@
 import sqlite3
 import os
+from config import Config
 
 class Database:
     def __init__(self, db_file=None):
-        self.db_file = db_file or os.path.join(os.path.dirname(__file__), '..', 'podcast_bot.db')
+        if Config.DATABASE_URL.startswith('postgres://'):
+            self.db_file = Config.DATABASE_URL
+        else:
+            self.db_file = db_file or os.path.join(Config.STORAGE_PATH, 'podcast_bot.db')
         self.init_db()
 
     def init_db(self):
