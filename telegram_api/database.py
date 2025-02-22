@@ -40,7 +40,12 @@ class Database:
         """Initialize the database with required tables."""
         try:
             Base.metadata.create_all(self.engine)
+            # Test the connection
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+                print("✅ Database connected successfully!")
         except Exception as e:
+            print(f"❌ Database connection failed: {e}")
             logger.error(f"Error initializing database: {e}")
             raise
 

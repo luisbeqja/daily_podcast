@@ -13,19 +13,24 @@ app.config.from_object(Config)
 Config.init_app(app)
 
 # Initialize database
-db = Database()
+try:
+    db = Database()
+    print(f"🔌 Connected to database at: {Config.DATABASE_URL}")
+except Exception as e:
+    print(f"❌ Failed to connect to database: {e}")
+    raise
 
-# Global variable to track the bot thread
+# Global variable for bot thread
 bot_thread = None
 
-def ensure_bot_running():
-    """Ensure the bot is running in a separate thread."""
+def start_bot_thread():
     global bot_thread
     if bot_thread is None or not bot_thread.is_alive():
         bot_thread = threading.Thread(target=start_bot, daemon=True)
         bot_thread.start()
-        return True
-    return False
+
+# Start bot thread immediately
+start_bot_thread()
 
 @app.route('/')
 def home():
@@ -97,6 +102,4 @@ def get_stats():
         }), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    start_bot()  # Start the bot first
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
