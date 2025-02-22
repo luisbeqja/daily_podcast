@@ -1,197 +1,168 @@
-import sqlite3
 import os
-from config import Config
 import logging
+from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+from datetime import datetime
+from config import Config
 
 logger = logging.getLogger(__name__)
 
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = 'users'
+    
+    user_id = Column(Integer, primary_key=True)
+    username = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    podcasts = relationship("Podcast", back_populates="user")
+
+class Podcast(Base):
+    __tablename__ = 'podcasts'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.user_id'))
+    topic = Column(String)
+    language = Column(String)
+    intro_path = Column(String)
+    episode_path = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User", back_populates="podcasts")
+
 class Database:
-    def __init__(self, db_file=None):
-        if Config.DATABASE_URL.startswith('postgres://'):
-            self.db_file = Config.DATABASE_URL
-        else:
-            self.db_file = db_file or os.path.join(Config.STORAGE_PATH, 'podcast_bot.db')
+    def __init__(self):
+        self.engine = create_engine(Config.DATABASE_URL)
+        self.Session = sessionmaker(bind=self.engine)
         self.init_db()
 
     def init_db(self):
         """Initialize the database with required tables."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
-        # Create users table
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
-                username TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create podcasts table
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS podcasts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                topic TEXT,
-                language TEXT,
-                intro_path TEXT,
-                episode_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        try:
+            Base.metadata.create_all(self.engine)
+        except Exception as e:
+            logger.error(f"Error initializing database: {e}")
+            raise
 
     def add_user(self, user_id: int, username: str = None):
         """Add a new user to the database."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
-        c.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)',
-                 (user_id, username))
-        
-        conn.commit()
-        conn.close()
+        session = self.Session()
+        try:
+            user = session.query(User).filter_by(user_id=user_id).first()
+            if not user:
+                user = User(user_id=user_id, username=username)
+                session.add(user)
+                session.commit()
+        except Exception as e:
+            logger.error(f"Error adding user: {e}")
+            session.rollback()
+        finally:
+            session.close()
 
     def add_podcast(self, user_id: int, topic: str, language: str, intro_path: str, episode_path: str):
         """Add a new podcast to the database."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
-        c.execute('''
-            INSERT INTO podcasts (user_id, topic, language, intro_path, episode_path)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, topic, language, intro_path, episode_path))
-        
-        conn.commit()
-        conn.close()
+        session = self.Session()
+        try:
+            podcast = Podcast(
+                user_id=user_id,
+                topic=topic,
+                language=language,
+                intro_path=intro_path,
+                episode_path=episode_path
+            )
+            session.add(podcast)
+            session.commit()
+        except Exception as e:
+            logger.error(f"Error adding podcast: {e}")
+            session.rollback()
+        finally:
+            session.close()
 
     def get_user_podcasts(self, user_id: int):
         """Get all podcasts for a specific user."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
-        c.execute('''
-            SELECT topic, language, intro_path, episode_path, created_at
-            FROM podcasts
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        ''', (user_id,))
-        
-        podcasts = c.fetchall()
-        conn.close()
-        
-        return podcasts
+        session = self.Session()
+        try:
+            podcasts = session.query(Podcast).filter_by(user_id=user_id).order_by(Podcast.created_at.desc()).all()
+            return [(p.topic, p.language, p.intro_path, p.episode_path, p.created_at) for p in podcasts]
+        finally:
+            session.close()
 
     def user_exists(self, user_id: int):
         """Check if a user exists in the database."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
-        c.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,))
-        exists = c.fetchone() is not None
-        
-        conn.close()
-        return exists 
+        session = self.Session()
+        try:
+            return session.query(User).filter_by(user_id=user_id).first() is not None
+        finally:
+            session.close()
 
     def clear_user_data(self, user_id: int):
         """Clear all podcasts for a specific user."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
+        session = self.Session()
         try:
-            # Get paths to delete
-            c.execute('SELECT intro_path, episode_path FROM podcasts WHERE user_id = ?', (user_id,))
-            paths = c.fetchall()
-            
-            # Delete from database
-            c.execute('DELETE FROM podcasts WHERE user_id = ?', (user_id,))
-            conn.commit()
+            podcasts = session.query(Podcast).filter_by(user_id=user_id).all()
             
             # Delete files
-            for intro_path, episode_path in paths:
+            for podcast in podcasts:
                 try:
-                    if intro_path and os.path.exists(intro_path):
-                        os.remove(intro_path)
-                    if episode_path and os.path.exists(episode_path):
-                        os.remove(episode_path)
+                    if podcast.intro_path and os.path.exists(podcast.intro_path):
+                        os.remove(podcast.intro_path)
+                    if podcast.episode_path and os.path.exists(podcast.episode_path):
+                        os.remove(podcast.episode_path)
                 except Exception as e:
                     logger.error(f"Error deleting files: {e}")
-                
+            
+            # Delete database records
+            session.query(Podcast).filter_by(user_id=user_id).delete()
+            session.commit()
             return True
         except Exception as e:
             logger.error(f"Error clearing user data: {e}")
+            session.rollback()
             return False
         finally:
-            conn.close() 
+            session.close()
 
     def get_all_users(self):
         """Get all users and their podcast count."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
+        session = self.Session()
         try:
-            c.execute('''
-                SELECT 
-                    u.user_id,
-                    u.username,
-                    u.created_at,
-                    COUNT(p.id) as podcast_count
-                FROM users u
-                LEFT JOIN podcasts p ON u.user_id = p.user_id
-                GROUP BY u.user_id
-                ORDER BY u.created_at DESC
-            ''')
-            
-            users = []
-            for user_id, username, created_at, podcast_count in c.fetchall():
-                users.append({
-                    "user_id": user_id,
-                    "username": username,
-                    "created_at": created_at,
-                    "podcast_count": podcast_count
-                })
-            
-            return users
+            users = session.query(User).all()
+            return [{
+                "user_id": user.user_id,
+                "username": user.username,
+                "created_at": user.created_at,
+                "podcast_count": len(user.podcasts)
+            } for user in users]
         finally:
-            conn.close()
+            session.close()
 
     def get_stats(self):
         """Get general statistics about the bot usage."""
-        conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        
+        session = self.Session()
         try:
             stats = {}
             
             # Get total users
-            c.execute('SELECT COUNT(*) FROM users')
-            stats['total_users'] = c.fetchone()[0]
+            stats['total_users'] = session.query(User).count()
             
             # Get total podcasts
-            c.execute('SELECT COUNT(*) FROM podcasts')
-            stats['total_podcasts'] = c.fetchone()[0]
+            stats['total_podcasts'] = session.query(Podcast).count()
             
             # Get podcasts by language
-            c.execute('''
-                SELECT language, COUNT(*) as count
-                FROM podcasts
-                GROUP BY language
-            ''')
+            language_counts = session.query(
+                Podcast.language, 
+                text('COUNT(*) as count')
+            ).group_by(Podcast.language).all()
             stats['podcasts_by_language'] = {
-                lang: count for lang, count in c.fetchall()
+                lang: count for lang, count in language_counts
             }
             
             # Get podcasts created today
-            c.execute('''
-                SELECT COUNT(*) 
-                FROM podcasts 
-                WHERE date(created_at) = date('now')
-            ''')
-            stats['podcasts_today'] = c.fetchone()[0]
+            today_count = session.query(Podcast).filter(
+                text("DATE(created_at) = CURRENT_DATE")
+            ).count()
+            stats['podcasts_today'] = today_count
             
             return stats
         finally:
-            conn.close() 
+            session.close() 
