@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 import threading
+import asyncio
 from telegram_api.bot import start_bot
 from telegram_api.database import Database
 from config import Config
@@ -23,10 +24,16 @@ except Exception as e:
 # Global variable for bot thread
 bot_thread = None
 
+def run_bot():
+    """Run the bot with its own event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_bot())
+
 def start_bot_thread():
     global bot_thread
     if bot_thread is None or not bot_thread.is_alive():
-        bot_thread = threading.Thread(target=start_bot, daemon=True)
+        bot_thread = threading.Thread(target=run_bot, daemon=True)
         bot_thread.start()
 
 # Start bot thread immediately
