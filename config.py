@@ -12,7 +12,6 @@ class Config:
     
     # Get PostgreSQL URL from Railway or use default SQLite
     DATABASE_URL = os.getenv('DATABASE_URL')
-    DATABASE_URL = 'postgresql://postgres:NhlALCHQNvZWstWHtHKGvZxFCDaaCvvU@postgres.railway.internal:5432/railway'
     if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
         # Convert postgres:// to postgresql:// for SQLAlchemy
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
