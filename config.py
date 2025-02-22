@@ -15,6 +15,8 @@ class Config:
     if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
         # Convert postgres:// to postgresql:// for SQLAlchemy
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    """     else:
+            DATABASE_URL = 'sqlite:///podcast_bot.db' """
         
     # Use Railway's persistent storage path if available
     STORAGE_PATH = os.getenv('RAILWAY_VOLUME_MOUNT_PATH', '')
