@@ -29,6 +29,8 @@ class Podcast(Base):
     episode_path = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User", back_populates="podcasts")
+    episode_lineup = Column(String)
+    episode_content = Column(String)
 
 class Database:
     def __init__(self):
@@ -64,7 +66,7 @@ class Database:
         finally:
             session.close()
 
-    def add_podcast(self, user_id: int, topic: str, language: str, intro_path: str, episode_path: str):
+    def add_podcast(self, user_id: int, topic: str, language: str, intro_path: str, episode_path: str, episode_lineup: str, episode_content: str):
         """Add a new podcast to the database."""
         session = self.Session()
         try:
@@ -73,7 +75,9 @@ class Database:
                 topic=topic,
                 language=language,
                 intro_path=intro_path,
-                episode_path=episode_path
+                episode_path=episode_path,
+                episode_lineup=episode_lineup,
+                episode_content=episode_content
             )
             session.add(podcast)
             session.commit()
@@ -82,7 +86,26 @@ class Database:
             session.rollback()
         finally:
             session.close()
-
+            
+    def update_podcast(self, user_id: int,episode_path: str, episode_content: str):
+        """Update a podcast in the database."""
+        session = self.Session()
+        try:
+            podcast = session.query(Podcast).filter_by(user_id=user_id).first()
+            if podcast:
+                podcast.topic = podcast.topic
+                podcast.language = podcast.language
+                podcast.intro_path = podcast.intro_path
+                podcast.episode_path = episode_path
+                podcast.episode_lineup = podcast.episode_lineup
+                podcast.episode_content = episode_content
+                session.commit()
+        except Exception as e:
+            logger.error(f"Error updating podcast: {e}")
+            session.rollback()
+        finally:
+            session.close()
+    
     def get_user_podcasts(self, user_id: int):
         """Get all podcasts for a specific user."""
         session = self.Session()
@@ -92,11 +115,21 @@ class Database:
         finally:
             session.close()
 
-    def user_exists(self, user_id: int):
-        """Check if a user exists in the database."""
+    def get_user_podcast_episode(self, user_id: int):
+        """Get the latest episode for a specific user."""
         session = self.Session()
         try:
-            return session.query(User).filter_by(user_id=user_id).first() is not None
+            podcast = session.query(Podcast).filter_by(user_id=user_id).order_by(Podcast.created_at.desc()).first()
+            return podcast.episode_content
+        finally:
+            session.close()
+    
+    def get_user_lineup(self, user_id: int):
+        """Get the lineup for a specific user."""
+        session = self.Session()
+        try:
+            podcast = session.query(Podcast).filter_by(user_id=user_id).order_by(Podcast.created_at.desc()).first()
+            return podcast.episode_lineup
         finally:
             session.close()
 
@@ -126,48 +159,3 @@ class Database:
             return False
         finally:
             session.close()
-
-    def get_all_users(self):
-        """Get all users and their podcast count."""
-        session = self.Session()
-        try:
-            users = session.query(User).all()
-            return [{
-                "user_id": user.user_id,
-                "username": user.username,
-                "created_at": user.created_at,
-                "podcast_count": len(user.podcasts)
-            } for user in users]
-        finally:
-            session.close()
-
-    def get_stats(self):
-        """Get general statistics about the bot usage."""
-        session = self.Session()
-        try:
-            stats = {}
-            
-            # Get total users
-            stats['total_users'] = session.query(User).count()
-            
-            # Get total podcasts
-            stats['total_podcasts'] = session.query(Podcast).count()
-            
-            # Get podcasts by language
-            language_counts = session.query(
-                Podcast.language, 
-                text('COUNT(*) as count')
-            ).group_by(Podcast.language).all()
-            stats['podcasts_by_language'] = {
-                lang: count for lang, count in language_counts
-            }
-            
-            # Get podcasts created today
-            today_count = session.query(Podcast).filter(
-                text("DATE(created_at) = CURRENT_DATE")
-            ).count()
-            stats['podcasts_today'] = today_count
-            
-            return stats
-        finally:
-            session.close() 

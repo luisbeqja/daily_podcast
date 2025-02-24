@@ -80,7 +80,7 @@ def create_first_episode(message, episode_lineup, language, user_id):
         logger.error(f"OpenAI API error: {e}")
         raise
 
-def create_episode(message, episode_number, previous_episode_script, language, user_id):
+def create_episode(message, episode_number, previous_episode_script, episode_lineup , language, user_id):
     """Send a message to OpenAI and return the response."""
     try:
         lang_instruction = language_prompts.get(language, language_prompts['en'])
@@ -92,6 +92,7 @@ def create_episode(message, episode_number, previous_episode_script, language, u
                  You are an podcaster assistant your name is "Lisa". 
                  Write the script for episode {episode_number} of the podcast. 
                  The script should be 3 minutes long.
+                 The episode lineup is the following: {episode_lineup}
                  Previous episode script: {previous_episode_script}
                  
                  Remember this will be read by a Text to Speech model.
@@ -113,13 +114,55 @@ def create_episode(message, episode_number, previous_episode_script, language, u
 
 
 
-def start_chain(message, language, user_id):
+def start_initial_chain(message, language, user_id, db):
+    print(f"Starting initial chain for user {user_id}")
+    """Start the chain of the podcast."""
+    
+    user_dir = os.path.join("llm", "episodes", str(user_id))
+    intro_path = os.path.join(user_dir, "first_episode.mp3")
+    episode_path = os.path.join(user_dir, "episode_1.mp3")
+    
+    episode_lineup = create_episode_lineup(message, language, user_id)
+    
+    first_episode = create_first_episode(message, episode_lineup, language, user_id)
+    
+    episode_1 = create_episode(message, 1, first_episode, episode_lineup, language, user_id)
+    
+    # Save podcast information to database with user-specific paths        
+    db.add_podcast(
+        user_id=user_id,
+        topic=message,
+        language=language,
+        intro_path=intro_path,
+        episode_path=episode_path,
+        episode_lineup=episode_lineup,
+        episode_content=episode_1
+    )
+    
+    return episode_1
+
+    
+def start_chain(message, language, user_id, db, episode_number):
     print(f"Starting chain for user {user_id}")
     """Start the chain of the podcast."""
-    episode_lineup = create_episode_lineup(message, language, user_id)
-    print("Episode lineup created")
-    first_episode = create_first_episode(message, episode_lineup, language, user_id)
-    print("First episode created")
-    episode_1 = create_episode(message, 1, first_episode, language, user_id)
-    print("Episode 1 created")
-    return episode_1
+    
+    user_dir = os.path.join("llm", "episodes", str(user_id))
+    episode_path = os.path.join(user_dir, f"episode_{episode_number}.mp3")
+    
+    episode_lineup = db.get_user_lineup(user_id)
+        
+    print(f"Episode lineup: {episode_lineup}")
+
+    episode = create_episode(message, episode_number, (db.get_user_podcast_episode(user_id) or ""), episode_lineup, language, user_id)
+    
+    episode_content = f"{(db.get_user_podcast_episode(user_id) or 'No previous episode')} \n\n {episode}"
+    
+    # Save podcast information to database with user-specific paths    
+    db.update_podcast(
+        user_id=user_id,
+        episode_path=episode_path,
+        episode_content=episode_content
+    )
+    return episode_content
+    
+    

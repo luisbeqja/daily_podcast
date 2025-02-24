@@ -19,7 +19,7 @@ import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from llm.llm import start_chain
+from llm.llm import start_chain, start_initial_chain
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +44,7 @@ if not TOKEN:
 WAITING_FOR_TOPIC = 1
 WAITING_FOR_CONFIRMATION = 2
 WAITING_FOR_LANGUAGE = 3  # New state for language selection
+WAITING_FOR_NEXT_EPISODE = 4  # New state for next episode request
 
 help_message = """
 Heyyy! 😊 I'm Lisa, your personal Podcaster 🎙️.
@@ -123,7 +124,7 @@ async def restrict_user(context: ContextTypes.DEFAULT_TYPE, user_id: int, msg) -
         # Fallback to just using our internal tracking
         users_with_episode.add(user_id)
 
-async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podcast_topic: str, language: str, message=None):
+async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podcast_topic: str, language: str, message=None, episode_number: int = 1):
     """Send an existing podcast audio file to the user."""
     try:
         msg = message or update.message
@@ -138,15 +139,28 @@ async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podca
         # Add user to database if not exists
         db.add_user(user_id, username)
         
-        # Generate podcast with user_id
-        start_chain(podcast_topic, language, user_id)
-
+        if episode_number == 1:
+            # Generate first episode and intro
+            start_initial_chain(podcast_topic, language, user_id, db)
+        else:
+            # Generate next episode
+            start_chain(podcast_topic, language, user_id, db, episode_number)
+        
         # Path to the audio files in user's directory
         user_dir = os.path.join("llm", "episodes", str(user_id))
-        intro_path = os.path.join(user_dir, "first_episode.mp3")
-        episode_path = os.path.join(user_dir, "episode_1.mp3")
         
-        if os.path.exists(intro_path) and os.path.exists(episode_path):
+        if episode_number == 1:
+            intro_path = os.path.join(user_dir, "first_episode.mp3")
+            episode_path = os.path.join(user_dir, "episode_1.mp3")
+        else:
+            episode_path = os.path.join(user_dir, f"episode_{episode_number}.mp3")
+        
+        # Store current episode number in user data
+        context.user_data['current_episode'] = episode_number
+        context.user_data['podcast_topic'] = podcast_topic
+        context.user_data['language'] = language
+        
+        if episode_number == 1 and os.path.exists(intro_path) and os.path.exists(episode_path):
             # Send the audio files
             await msg.reply_text("🎙️ Here's your podcast, enjoy!")
             await msg.reply_audio(
@@ -156,25 +170,29 @@ async def send_podcast(update: Update, context: ContextTypes.DEFAULT_TYPE, podca
             )
             await msg.reply_audio(
                 audio=open(episode_path, 'rb'),
-                title=f"First Episode about {podcast_topic}",
-                caption="There you go! this is the first episode of your podcast! Tomorrow you will receive the next one! 🎧",
-                filename=f"First_Episode_{podcast_topic.replace(' ', '_')}.mp3"
+                title=f"Episode {episode_number} about {podcast_topic}",
+                filename=f"Episode_{episode_number}_{podcast_topic.replace(' ', '_')}.mp3"
             )
-            
-            # Save podcast information to database with user-specific paths
-            db.add_podcast(
-                user_id=user_id,
-                topic=podcast_topic,
-                language=language,
-                intro_path=intro_path,
-                episode_path=episode_path
+        elif episode_number > 1 and os.path.exists(episode_path):
+            await msg.reply_audio(
+                audio=open(episode_path, 'rb'),
+                title=f"Episode {episode_number} about {podcast_topic}",
+                filename=f"Episode_{episode_number}_{podcast_topic.replace(' ', '_')}.mp3"
             )
-            
-            # Restrict user from sending messages
-            await restrict_user(context, user_id, msg)
-                
         else:
             await msg.reply_text("Sorry, I couldn't find the podcast file. Please try a different topic. 😔")
+            return
+            
+        # Add Next Episode button if not the last episode
+        if episode_number < 5:
+            keyboard = [[InlineKeyboardButton("Next Episode ▶️", callback_data='next_episode')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await msg.reply_text(
+                f"I hope you enjoyed Episode {episode_number}! Would you like to listen to the next episode?",
+                reply_markup=reply_markup
+            )
+        else:
+            await msg.reply_text("That was the last episode of your podcast series! I hope you enjoyed it! 🎉")
             
     except Exception as e:
         logger.error(f"Error sending podcast: {e}")
@@ -192,6 +210,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data == 'create_podcast':
         await query.message.reply_text("Please tell me what topic you'd like your podcast to be about! 🎧🎧")
         return WAITING_FOR_TOPIC
+    elif query.data == 'next_episode':
+        # Get the current episode number and podcast details from user data
+        current_episode = context.user_data.get('current_episode', 1)
+        podcast_topic = context.user_data.get('podcast_topic')
+        language = context.user_data.get('language')
+        
+        if not all([current_episode, podcast_topic, language]):
+            await query.message.reply_text("Sorry, I couldn't find your podcast information. Please start a new podcast.")
+            return ConversationHandler.END
+            
+        # Generate and send the next episode
+        next_episode = current_episode + 1
+        await query.message.reply_text(f"Generating Episode {next_episode} for you! Please wait... ⏳")
+        await send_podcast(update, context, podcast_topic, language, message=query.message, episode_number=next_episode)
+        return WAITING_FOR_NEXT_EPISODE
     elif query.data.startswith('lang_'):
         # Handle language selection
         language = query.data.split('_')[1]
@@ -346,6 +379,7 @@ def start_bot() -> None:
             WAITING_FOR_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_topic)],
             WAITING_FOR_LANGUAGE: [CallbackQueryHandler(button_callback)],
             WAITING_FOR_CONFIRMATION: [CallbackQueryHandler(button_callback)],
+            WAITING_FOR_NEXT_EPISODE: [CallbackQueryHandler(button_callback)],
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
