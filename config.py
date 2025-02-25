@@ -15,11 +15,13 @@ class Config:
     
     # Set database URL based on environment
     if ENV == 'production':
+        print("Production environment detected")
         DATABASE_URL = os.getenv('DATABASE_URL')
         if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
             # Convert postgres:// to postgresql:// for SQLAlchemy
             DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     else:
+        print("Development environment detected")
         # Use SQLite for development
         DATABASE_URL = 'sqlite:///podcast_bot.db'
     
