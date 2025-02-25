@@ -1,6 +1,6 @@
 import os
 import logging
-from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, ForeignKey, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -13,7 +13,7 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     
-    user_id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
     username = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     podcasts = relationship("Podcast", back_populates="user")
@@ -22,7 +22,7 @@ class Podcast(Base):
     __tablename__ = 'podcasts'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.user_id'))
+    user_id = Column(BigInteger, ForeignKey('users.user_id'))
     topic = Column(String)
     language = Column(String)
     intro_path = Column(String)
@@ -34,21 +34,35 @@ class Podcast(Base):
 
 class Database:
     def __init__(self):
-        self.engine = create_engine(Config.DATABASE_URL)
-        self.Session = sessionmaker(bind=self.engine)
-        self.init_db()
+        """Initialize database connection."""
+        try:
+            # Get database URL from environment variable or use SQLite as fallback
+            database_url = os.getenv('DATABASE_URL', 'sqlite:///podcast_bot.db')
+            
+            # Convert postgres:// to postgresql:// for SQLAlchemy
+            if database_url.startswith('postgres://'):
+                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            
+            self.engine = create_engine(database_url)
+            self.Session = sessionmaker(bind=self.engine)
+            
+            # Create all tables
+            self.init_db()
+            
+        except Exception as e:
+            logger.error(f"Database initialization error: {e}")
+            raise
 
     def init_db(self):
-        """Initialize the database with required tables."""
+        """Initialize database tables."""
         try:
+            # Drop existing tables if they exist
+            Base.metadata.drop_all(self.engine)
+            # Create new tables with updated schema
             Base.metadata.create_all(self.engine)
-            # Test the connection
-            with self.engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-                print("✅ Database connected successfully!")
+            logger.info("Database tables created successfully")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
-            logger.error(f"Error initializing database: {e}")
+            logger.error(f"Error creating database tables: {e}")
             raise
 
     def add_user(self, user_id: int, username: str = None):
