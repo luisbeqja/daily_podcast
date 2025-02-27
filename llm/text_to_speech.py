@@ -1,7 +1,16 @@
 from pathlib import Path
 from llm.config import openai
 import os
+from pydub import AudioSegment
 
+def add_intro_to_audio(intro_path, main_audio_path, output_path):
+    """
+    Add an intro audio to the beginning of the main audio and save to output path.
+    """
+    intro = AudioSegment.from_mp3(intro_path)
+    main_audio = AudioSegment.from_mp3(main_audio_path)
+    combined = intro + main_audio
+    combined.export(output_path, format="mp3")
 
 def text_to_speech(text, file_path):
     """
@@ -23,6 +32,19 @@ def text_to_speech(text, file_path):
         response_format="mp3",  # Ensure high quality audio
     )
     
-    # Stream the response to the specified file path
-    response.stream_to_file(file_path)
+    # Define the path to the intro audio
+    # Use a relative path from the project root to the assets directory
+    intro_path = str(Path(__file__).parent.parent / "assets" / "intro.mp3")
+    
+    # Create a temporary path for the main audio
+    temp_main_audio_path = f"{file_path}.temp.mp3"
+    
+    # Save the main audio to the temporary path
+    response.stream_to_file(temp_main_audio_path)
+    
+    # Combine the intro and main audio
+    add_intro_to_audio(intro_path, temp_main_audio_path, file_path)
+    
+    # Remove the temporary main audio file
+    os.remove(temp_main_audio_path)
     return file_path
