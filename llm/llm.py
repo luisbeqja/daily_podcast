@@ -39,7 +39,11 @@ def create_first_episode(message, episode_lineup, language, user_id):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create an intro for a podcast about: {message}\nThis is the episode lineup: {episode_lineup}"},
+                {"role": "user", "content": f"""
+                 Create an intro for a podcast about: {message}\nThis is the episode lineup: {episode_lineup}
+                 Use the Speech Synthesis Markup Language(SSML) to add pauses and emphasis to the text.
+                 make it <emphasis level="moderate">....</emphasis> and <prosody rate="slow">...</prosody>
+                 """},
             ]
         )
         
@@ -66,7 +70,11 @@ def create_episode(message, episode_number, previous_episode_script, episode_lin
             model="gpt-4o-mini", 
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create episode {episode_number} about: {message}"},
+                {"role": "user", "content": f"""
+                    Create episode {episode_number} about: {message}
+                    Use the Speech Synthesis Markup Language(SSML) to add pauses and emphasis to the text.
+                    make it <emphasis level="moderate">....</emphasis> and <prosody rate="slow">...</prosody>
+                 """},
             ]
         )
         # Create user directory and save file there
