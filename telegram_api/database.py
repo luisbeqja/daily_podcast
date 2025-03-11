@@ -36,12 +36,10 @@ class Database:
     def __init__(self):
         """Initialize database connection."""
         try:
-            # Get database URL from environment variable or use SQLite as fallback
-            database_url = os.getenv('DATABASE_URL', 'sqlite:///podcast_bot.db')
+            # Use the database URL from Config instead of directly from environment
+            database_url = Config.DATABASE_URL
             
-            # Convert postgres:// to postgresql:// for SQLAlchemy
-            if database_url.startswith('postgres://'):
-                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            logger.info(f"Connecting to database: {database_url}")
             
             self.engine = create_engine(database_url)
             self.Session = sessionmaker(bind=self.engine)

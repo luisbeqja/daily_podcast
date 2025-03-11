@@ -1,5 +1,5 @@
 from llm.config import logger, openai
-from llm.text_to_speech import text_to_speech
+from llm.text_to_speech import ElevenLabsTextToSpeech
 from llm.prompts.prompt_loader import LANGUAGE_PROMPTS, EPISODE_LINEUP_PROMPT, FIRST_EPISODE_PROMPT, EPISODE_PROMPT
 import os
 
@@ -45,7 +45,7 @@ def create_first_episode(message, episode_lineup, language, user_id):
         
         # Create user directory and save file there
         user_dir = ensure_user_directory(user_id)
-        text_to_speech(completion.choices[0].message.content, os.path.join(user_dir, "first_episode"))
+        ElevenLabsTextToSpeech(completion.choices[0].message.content, os.path.join(user_dir, "first_episode"))
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
@@ -71,7 +71,7 @@ def create_episode(message, episode_number, previous_episode_script, episode_lin
         )
         # Create user directory and save file there
         user_dir = ensure_user_directory(user_id)
-        text_to_speech(completion.choices[0].message.content, os.path.join(user_dir, f"episode_{episode_number}"))
+        ElevenLabsTextToSpeech(completion.choices[0].message.content, os.path.join(user_dir, f"episode_{episode_number}"))
         return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
