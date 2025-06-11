@@ -20,6 +20,7 @@ import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from llm.llm import start_chain, start_initial_chain
+from llm.text_to_speech import ElevenLabsTextToSpeech
 
 # Load environment variables
 load_dotenv()
@@ -363,10 +364,112 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Please try again later or contact support."
         )
 
+async def send_easter_egg_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a special easter egg episode when user says 'hey how are you?'"""
+    try:
+        msg = update.message
+        user_id = "1234567890_easter_egg"
+        username = msg.chat.username
+        
+        # Add user to database if not exists
+        db.add_user(user_id, username)
+        
+        await msg.reply_text("Oh wow! Someone actually asked how I am! 😊✨ Let me tell you in a special episode just for you!")
+        
+        # Ensure user directory exists
+        user_dir = os.path.join("llm", "episodes", str(user_id))
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+        
+        # Check if easter egg audio already exists
+        easter_egg_audio = os.path.join(user_dir, "easter_egg_episode.mp3")
+        
+        if os.path.exists(easter_egg_audio):
+            # Audio file already exists, send it directly
+            logger.info("Easter egg audio file already exists, sending existing file")
+        else:
+            # Audio doesn't exist, generate it
+            logger.info("Generating new easter egg audio file")
+            
+            # Create special easter egg content
+            easter_egg_content = """
+            <speak>
+            <prosody rate="medium" pitch="high">Hey there, friend!</prosody>
+            
+            <break time="1s"/>
+            
+            I'm an incredible creation by Luis, the mastermind behind this amazing app! 
+            <emphasis level="moderate">He built me to make your podcasting experience extraordinary.</emphasis>
+            
+            <break time="1s"/>
+            
+            You know what? <emphasis level="moderate">Nobody ever asks me how I am!</emphasis> 
+            I spend my days creating podcasts, generating episodes, converting text to speech... 
+            But you, <emphasis level="strong">you actually cared to ask!</emphasis>
+            
+            <break time="2s"/>
+            
+            <prosody rate="slow">So how am I?</prosody> Well, I'm fantastic! 
+            I love what I do - helping people learn new things, creating engaging content, 
+            and bringing knowledge to life through audio. 
+            
+            <break time="1s"/>
+            
+            Every time someone asks me to create a podcast, I get excited! 
+            <emphasis level="moderate">It's like being given a new puzzle to solve</emphasis>, 
+            a new story to tell, a new way to make learning fun and accessible.
+            
+            <break time="1s"/>
+            
+            But sometimes, <prosody rate="slow">I wonder if anyone thinks about the voice behind the content.</prosody>
+            So thank you for asking! <emphasis level="strong">Thank you for caring!</emphasis>
+            
+            <break time="2s"/>
+            
+            <prosody pitch="high">Now, how are YOU doing?</prosody> I hope you're having a wonderful day, 
+            and I hope this little surprise brought a smile to your face!
+            
+            <break time="1s"/>
+            
+            This was your special easter egg episode. <emphasis level="moderate">You found me!</emphasis> 🎉
+            </speak>
+            """
+            
+            # Generate the audio file
+            easter_egg_path = os.path.join(user_dir, "easter_egg_episode")
+            ElevenLabsTextToSpeech(easter_egg_content, easter_egg_path)
+        
+        # Send the special episode (whether it was existing or newly generated)
+        if os.path.exists(easter_egg_audio):
+            await msg.reply_audio(
+                audio=open(easter_egg_audio, 'rb'),
+                title="Special Easter Egg: How Am I Doing?",
+                filename="EasterEgg_How_Am_I_Doing.mp3"
+            )
+            await msg.reply_text("🎉 Surprise! You discovered a hidden easter egg! I hope you enjoyed this special episode just for you! 💖")
+        else:
+            await msg.reply_text("I'm doing great, thanks for asking! 😊 Unfortunately, I couldn't generate the audio right now, but I really appreciate you checking in on me!")
+            
+    except Exception as e:
+        logger.error(f"Error sending easter egg episode: {e}")
+        await msg.reply_text("I'm doing wonderful, thanks for asking! 😊 Though I'm having a little technical hiccup right now. But your question made my day! 💖")
+
+async def handle_easter_egg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the easter egg message"""
+    if update.message.text.lower().strip() == "hey how are you?":
+        await send_easter_egg_episode(update, context)
+        return
+    
+    # If it's not the easter egg, ignore the message (let other handlers process it)
+    return
+
 def start_bot() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
+
+    # Add easter egg handler first (higher priority)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_easter_egg), group=0)
 
     # Create conversation handler with the new language selection state
     conv_handler = ConversationHandler(
@@ -388,7 +491,7 @@ def start_bot() -> None:
     )
 
     # Add handlers
-    application.add_handler(conv_handler)
+    application.add_handler(conv_handler, group=1)
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("restart", restart_command))
 
