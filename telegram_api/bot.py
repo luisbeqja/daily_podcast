@@ -368,16 +368,21 @@ async def send_easter_egg_episode(update: Update, context: ContextTypes.DEFAULT_
     """Send a special easter egg episode when user says 'hey how are you?'"""
     try:
         msg = update.message
-        user_id = "1234567890_easter_egg"
+        # Use a special numeric user_id for easter egg to avoid database issues
+        easter_egg_user_id = 999999999
         username = msg.chat.username
         
-        # Add user to database if not exists
-        db.add_user(user_id, username)
+        # Add easter egg user to database if not exists (using numeric ID)
+        try:
+            db.add_user(easter_egg_user_id, "easter_egg_user")
+        except Exception as db_error:
+            # If database fails, just log it and continue - easter egg doesn't need database
+            logger.warning(f"Failed to add easter egg user to database: {db_error}")
         
         await msg.reply_text("Oh wow! Someone actually asked how I am! 😊✨ Let me tell you in a special episode just for you!")
         
         # Ensure user directory exists
-        user_dir = os.path.join("llm", "episodes", str(user_id))
+        user_dir = os.path.join("llm", "episodes", str(easter_egg_user_id))
         if not os.path.exists(user_dir):
             os.makedirs(user_dir)
         
@@ -488,6 +493,7 @@ def start_bot() -> None:
             CommandHandler("cancel", cancel),
             CommandHandler("restart", restart_command)
         ],
+        per_message=False,  # Fix PTBUserWarning about CallbackQueryHandler tracking
     )
 
     # Add handlers

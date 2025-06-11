@@ -12,7 +12,5 @@ except Exception as e:
     raise
 
 if __name__ == '__main__':
-    # Run bot in main thread
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(start_bot())
-    loop.run_forever()
+    # Run bot using asyncio.run() to avoid deprecation warning
+    asyncio.run(start_bot())
